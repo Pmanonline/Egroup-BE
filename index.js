@@ -81,6 +81,11 @@ app.use("/api", authorRoutes);
 app.use("/api", commentRoutes);
 app.use("/api", groupRoutes);
 
+// Test route
+app.get("/", (req, res) => {
+  res.json("This API(Egroup) is available!! today!!");
+});
+
 // Server startup
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {
