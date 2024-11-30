@@ -40,14 +40,17 @@ app.use(morgan("dev"));
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(
-  cors({
-    origin: ["http://localhost:5173"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+
+const corsOptions = {
+  origin: "*", // Allow all origins
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false, // Explicitly set to false
+};
+
+// 2. Basic middleware
+app.use(cors(corsOptions));
+app.options("*", cors());
 app.use(errorHandlingMiddleware);
 app.use(
   session({
@@ -78,5 +81,18 @@ app.use("/api", authorRoutes);
 app.use("/api", commentRoutes);
 app.use("/api", groupRoutes);
 
+// Server startup
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || "production"}`);
+});
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err, promise) => {
+  console.log("Unhandled Rejection:", err.message);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+module.exports = app;
