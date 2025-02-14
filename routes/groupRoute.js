@@ -4,8 +4,9 @@ const {
   createGroup,
   createDiscussion,
   joinGroup,
+  leaveGroup,
   likeDiscussion,
-  commentDiscussion,
+  Createcomment,
   likeComment,
   editComment,
   deleteComment,
@@ -25,20 +26,21 @@ const {
 // Group routes
 router.post("/groups/createGroup", createGroup);
 router.post("/groups/join/:groupId", joinGroup);
+router.post("/groups/leave/:groupId", leaveGroup);
+router.post("/groups/members/:groupId", checkMembership);
 router.delete("/groups/deleteGroup/:groupId", deleteGroup);
-router.get("/groups/:groupId/members/:userId", checkMembership);
 
 // Discussion routes
 router.post("/discussions/createDiscussion", createDiscussion);
-router.post("/discussions/commentDiscussion/:discussionId", commentDiscussion);
+router.post("/discussions/likeDiscussion", likeDiscussion);
+router.post("/discussions/Createcomment/:discussionId", Createcomment);
 router.delete("/groups/deleteDiscussion/:discussionId", deleteDiscussion);
-router.post("/discussions/:discussionId/likeDiscussion", likeDiscussion);
 
 // Comment routes
 router.post("/discussions/:discussionId/comments/:commentId/like", likeComment);
 router.put("/discussions/:discussionId/comments/:commentId/edit", editComment);
 router.delete(
-  "/discussions/:discussionId/comments/:commentId/delete",
+  "/discussions/delete/:discussionId/comments/:commentId",
   deleteComment
 );
 
@@ -46,7 +48,8 @@ router.delete(
 // New routes
 router.get("/groups/getAllGroups/", getAllGroups);
 router.get("/groups/getGroupBySlug/:slug", getGroupBySlug);
-router.get("/groups/getDiscussionsByGroup/:slug", getDiscussionsByGroup);
+router.get("/groups/getDiscussionsByGroup/:groupId", getDiscussionsByGroup);
+
 router.get("/discussions/getAllDiscussions", getAllDiscussions);
 router.get("/discussions/getDiscussionBySlug/:slug", getDiscussionBySlug);
 router.get("/discussions/getDiscussionLikes/:discussionId", getDiscussionLikes);
