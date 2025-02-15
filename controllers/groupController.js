@@ -609,30 +609,85 @@ const getUserInfo = (req) => {
   };
 };
 
+// const createGroup = async (req, res) => {
+//   try {
+//     const { Groupname, description, category } = req.body;
+
+//     const group = new Group({
+//       Groupname,
+//       description,
+//       category,
+//       creator: user,
+//       members: [user], // Add creator as first member
+//     });
+
+//     await group.save();
+//     res.status(201).json(group);
+//   } catch (error) {
+//     handleError(res, 400, error.message);
+//   }
+// };
 const createGroup = async (req, res) => {
   try {
-    const { name, description, category } = req.body;
-    const user = getUserInfo(req);
-
-    const group = new Group({
-      name,
+    const {
+      Groupname,
       description,
       category,
-      creator: user,
-      members: [user], // Add creator as first member
+      id: authId,
+      email,
+      name,
+    } = req.body;
+
+    // Add input validation
+    if (!Groupname || !description || !category) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Check if group with same name exists
+    const existingGroup = await Group.findOne({ Groupname });
+    if (existingGroup) {
+      return res
+        .status(400)
+        .json({ message: "Group with this name already exists" });
+    }
+
+    const memberData = { id: authId, email, name };
+
+    const group = new Group({
+      Groupname,
+      description,
+      category,
+      creator: memberData,
+      members: [memberData],
     });
 
-    await group.save();
-    res.status(201).json(group);
+    const savedGroup = await group.save();
+
+    // Return the slug in the response for frontend redirection
+    res.status(201).json({
+      ...savedGroup.toJSON(),
+      slug: savedGroup.slug,
+    });
   } catch (error) {
-    handleError(res, 400, error.message);
+    console.error("Create group error:", error);
+    res.status(400).json({
+      message: error.message || "Failed to create group",
+    });
   }
 };
 
 const joinGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const user = getUserInfo(req);
+    const { id, email, name } = req.body;
+
+    if (!id || !email) {
+      return handleError(
+        res,
+        400,
+        "ID and email are required to join the group"
+      );
+    }
 
     const group = await Group.findById(groupId);
     if (!group) {
@@ -640,15 +695,18 @@ const joinGroup = async (req, res) => {
     }
 
     // Check if user is already a member
-    const isMember = group.members.some(
-      (member) => member.email === user.email
-    );
+    const isMember = group.members.some((member) => member.email === email);
     if (isMember) {
       return handleError(res, 400, "User is already a member of this group");
     }
 
-    // Add new member
-    group.members.push(user);
+    // Add new member with extracted details
+    group.members.push({
+      id,
+      email,
+      name: name?.trim() || "Anonymous", // Default if no name is provided
+    });
+
     await group.save();
 
     res.status(200).json({
@@ -691,7 +749,11 @@ const checkMembership = async (req, res) => {
 const leaveGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const user = getUserInfo(req);
+    const { email } = req.body;
+
+    if (!email) {
+      return handleError(res, 400, "Email is required");
+    }
 
     const group = await Group.findById(groupId);
     if (!group) {
@@ -699,14 +761,12 @@ const leaveGroup = async (req, res) => {
     }
 
     // Check if user is the creator
-    if (group.creator.email === user.email) {
+    if (group.creator.email === email) {
       return handleError(res, 400, "Group creator cannot leave the group");
     }
 
     // Remove user from members
-    group.members = group.members.filter(
-      (member) => member.email !== user.email
-    );
+    group.members = group.members.filter((member) => member.email !== email);
     await group.save();
 
     res.status(200).json({
@@ -720,7 +780,7 @@ const leaveGroup = async (req, res) => {
 const getAllGroups = async (req, res) => {
   try {
     const groups = await Group.find()
-      .select("name description category slug members")
+      .select("Groupname description category slug members")
       .populate("members", "email name");
 
     res.status(200).json(groups);
@@ -733,7 +793,7 @@ const getGroupBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
     const group = await Group.findOne({ slug })
-      .populate("category", "name slug")
+      .populate("category", "Groupname slug")
       .populate("members", "email name")
       .populate("creator", "email name");
 
@@ -743,7 +803,7 @@ const getGroupBySlug = async (req, res) => {
 
     const groupData = {
       id: group._id,
-      name: group.name,
+      Groupname: group.Groupname,
       description: group.description,
       category: group.category,
       members: group.members,
@@ -768,11 +828,6 @@ const deleteGroup = async (req, res) => {
     const group = await Group.findById(groupId);
 
     if (!checkDocumentExists(group, res, "Group")) return;
-
-    // Check if user is the creator
-    if (group.creator.toString() !== user._id.toString()) {
-      return handleError(res, 403, "Only group creator can delete the group");
-    }
 
     // Delete associated discussions
     await Discussion.deleteMany({ group: groupId });
@@ -831,33 +886,43 @@ const likeDiscussion = async (req, res) => {
   try {
     const { email, discussionId } = req.body;
 
-    console.log("Request Body:", req.body);
+    // Debugging: Log the request data
+    console.log("Received email:", email);
+    console.log("Received discussionId:", discussionId);
+
+    if (!email || !discussionId) {
+      return handleError(res, 400, "Email and discussionId are required.");
+    }
 
     const discussion = await Discussion.findById(discussionId);
 
     if (!checkDocumentExists(discussion, res, "Discussion")) return;
 
     const isLiked = discussion.likes.includes(email);
+    console.log("User has already liked?", isLiked);
 
     if (isLiked) {
       discussion.likes = discussion.likes.filter(
         (likedEmail) => likedEmail !== email
       );
     } else {
-      discussion.likes.push(email);
+      discussion.likes.push(email.trim().toLowerCase()); // Ensure correct format
     }
 
     await discussion.save();
 
-    return res.status(200).json({
-      message: isLiked ? "Unliked  " : "Liked ",
+    console.log("Updated Likes:", discussion.likes);
 
+    return res.status(200).json({
+      message: isLiked ? "Unliked" : "Liked",
       likes: discussion.likes,
     });
   } catch (error) {
+    console.error("Error in likeDiscussion:", error);
     handleError(res, 400, error.message);
   }
 };
+
 const likeComment = async (req, res) => {
   try {
     const { discussionId, commentId } = req.params;
@@ -1005,7 +1070,7 @@ const getDiscussionBySlug = async (req, res) => {
       slug: discussion.slug,
       username: discussion.username, // Ensure username is included
       group: discussion.group,
-      likes: discussion.likes.map((like) => like.username), // Extract usernames for likes
+      likes: discussion.likes.map((like) => like?.username),
       comments: discussion.comments.map((comment) => ({
         content: comment.content,
         username: comment.username,
@@ -1124,7 +1189,7 @@ const getDiscussionsByGroup = async (req, res) => {
     }
 
     const discussions = await Discussion.find({ group: groupId })
-      .populate("group", "name description category createdAt")
+      .populate("group", "Groupname description category createdAt")
       .sort({ createdAt: -1 });
 
     if (!discussions.length) {
